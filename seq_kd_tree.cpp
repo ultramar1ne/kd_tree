@@ -52,8 +52,6 @@ float select_pivot(kd_node* kds, int n, int dim, int sample_size = 5){
     return avg;
 }
 
-
-
 void build_kd_tree(kd_node* left_kds, int left_n, kd_node* right_kds, int right_n, int height, kd_node* parent){
     int dim = height %k;//todo: select dim on variance?
 
@@ -98,40 +96,67 @@ float euclid_dis(float* X, float* Y){
     return sqrt(res);
 }
 
-//todo: after reaching a leaf node, we may need to trace back if
-const bool NeedTrackBack = true;
-bool nn_query_down(float* X, kd_node* root, int* height, float* cur_min_dis, kd_node** cur_node){
-    int dim = *height % k;
-    if(*cur_min_dis>= euclid_dis(X,root->Xs)){
-        *cur_min_dis= euclid_dis(X,root->Xs);
+//todo: bugs here
+void nn_query_down(float* X, kd_node* root, int height, float cur_min_dis, kd_node** cur_node, kd_node* original_node){
+    if(root->isVisited){
+        *cur_node = root->parent_ptr;
+        nn_query_down(X, root->parent_ptr,height+1, cur_min_dis, cur_node,original_node);
+    }
+    int dim = height % k;
+    if(cur_min_dis>= euclid_dis(X,root->Xs)){
+        cur_min_dis= euclid_dis(X,root->Xs);
     }
     *cur_node = root;
+    (*cur_node)->isVisited= true;
+
 
     if(X[dim]>root->Xs[dim]){
         if(root->right){
-            *height+=1;
-            return nn_query_down(X, root->right,height, cur_min_dis, cur_node);
+            return nn_query_down(X, root->right,height+1, cur_min_dis, cur_node,original_node);
         }
     }else{
         if(root->left){
-            *height+=1;
-            return nn_query_down(X, root->left,height, cur_min_dis, cur_node);
+            return nn_query_down(X, root->left,height+1, cur_min_dis, cur_node,original_node);
+        }
+    }
+    cout<<"current result "<<euclid_dis(X, (*cur_node)->Xs)<<endl;
+    //reached leaf node here~
+
+    while ( *cur_node!=original_node){
+        kd_node* cur_parent = (*cur_node)->parent_ptr;
+        dim = height % k;
+        if (  cur_parent && ( abs(X[abs(dim-1)%k] - cur_parent->Xs[abs(dim-1)%k]) < cur_min_dis ) ) {
+            if(!cur_parent->right->isVisited){
+                *cur_node = cur_parent->right;
+                return nn_query_down(X, cur_parent->right, height-1, cur_min_dis, cur_node,original_node);
+            }else if(!cur_parent->left->isVisited) {
+                *cur_node = cur_parent->left;
+                return nn_query_down(X, cur_parent->left, height-1, cur_min_dis, cur_node,original_node);
+            }else{
+                cur_parent->right->isVisited= true; cur_parent->left->isVisited= true;
+                cur_node = &((*cur_node)->parent_ptr);
+                height--;
+            }
+        }else if(cur_parent) {
+            cur_node = &((*cur_node)->parent_ptr);
+            height--;
+        }else if(!cur_parent){
+            return;
         }
     }
 
-    // if the hyper plant "intersection"s the hyper ball :
-    if (root->parent_ptr && ( abs(X[abs(dim-1)%k] - root->parent_ptr->Xs[abs(dim-1)%k]) > *cur_min_dis ) ) {
-        cout<<"Need Trace Back!"<<abs( X[abs(dim-1)%k] - root->parent_ptr->Xs[abs(dim-1)%k] )<< endl;
-        return NeedTrackBack;
-    } else {
-        return false;
-    }
 }
+
+
+
 
 float* nn_query(float* X, kd_node* root ){
     kd_node* cur_node = nullptr;
     int height = 0; float cur_min_dis = 999999;
-    nn_query_down(X,root,&height,&cur_min_dis,&cur_node);
+    nn_query_down(X,root,height,cur_min_dis,&cur_node,root);
+    // root->parent_ptr && ( abs(X[abs(dim-1)%k] - root->parent_ptr->Xs[abs(dim-1)%k]) < *cur_min_dis )
+    /*如果超球面穿过平面，则平面的另一侧可能有更近的点，因此算法必须从当前节点向下移动树的另一个分支以寻找更近的点，遵循与整个搜索相同的递归过程.
+      如果超球面不与分裂平面相交，则算法继续沿树向上走，并消除该节点另一侧的整个分支。*/
     return cur_node->Xs;
 }
 
@@ -180,14 +205,14 @@ int main(){
     //build
     std::sort(kds,kds+N, [](kd_node x, kd_node y){return x.Xs[0] < y.Xs[0];});
     build_kd_tree(kds,N/2,kds+N/2+1,N-N/2-1,1,&kds[N/2]);
-    cout<<"built, nice"<<endl<<"Level Traverse:";
+    cout<<"built, nice"<<endl;
 
     //level order
     levelOrder(&kds[N/2]);
 
     //1-NN on  k-d tree
     cout<<endl<<"NN query"<<endl;
-    auto * X = new float [k]; for(int i = 0; i<k; i++){ X[i] = murmurhash(i)%666;}
+    auto * X = new float [k]; X[0] = 166; X[1] = 200; X[2]=-300;
 
     float* res = nn_query(X,&kds[N/2]);
     for(int i = 0; i<k; i++){ cout<<"dim "<<i<<": "<<res[i]<<" "<<endl;}
