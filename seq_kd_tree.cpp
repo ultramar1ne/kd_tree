@@ -4,8 +4,8 @@
 #include<cmath>
 using namespace std;
 
-int N=129;   // N nodes
-const int k = 3; // k-d
+int N=510;   // N nodes
+const int k = 4; // k-d
 
 inline int murmurhash(int u )
 {
@@ -97,14 +97,14 @@ float euclid_dis(float* X, float* Y){
 }
 
 //todo: bugs here
-void nn_query_down(float* X, kd_node* root, int height, float cur_min_dis, kd_node** cur_node, kd_node* original_node){
+void nn_query_down(float* X, kd_node* root, int height, float cur_min_dis, kd_node** cur_node, kd_node* original_node, float** best_index){
+    int dim = height % k;
     if(root->isVisited){
         *cur_node = root->parent_ptr;
-        nn_query_down(X, root->parent_ptr,height+1, cur_min_dis, cur_node,original_node);
-    }
-    int dim = height % k;
-    if(cur_min_dis>= euclid_dis(X,root->Xs)){
+        nn_query_down(X, root->parent_ptr,height+1, cur_min_dis, cur_node,original_node, best_index);
+    }else if(cur_min_dis>= euclid_dis(X,root->Xs)){
         cur_min_dis= euclid_dis(X,root->Xs);
+        (*best_index)=root->Xs;
     }
     *cur_node = root;
     (*cur_node)->isVisited= true;
@@ -112,26 +112,24 @@ void nn_query_down(float* X, kd_node* root, int height, float cur_min_dis, kd_no
 
     if(X[dim]>root->Xs[dim]){
         if(root->right){
-            return nn_query_down(X, root->right,height+1, cur_min_dis, cur_node,original_node);
+            return nn_query_down(X, root->right,height+1, cur_min_dis, cur_node,original_node, best_index);
         }
     }else{
         if(root->left){
-            return nn_query_down(X, root->left,height+1, cur_min_dis, cur_node,original_node);
+            return nn_query_down(X, root->left,height+1, cur_min_dis, cur_node,original_node, best_index);
         }
     }
-    cout<<"current result "<<euclid_dis(X, (*cur_node)->Xs)<<endl;
     //reached leaf node here~
-
     while ( *cur_node!=original_node){
         kd_node* cur_parent = (*cur_node)->parent_ptr;
         dim = height % k;
         if (  cur_parent && ( abs(X[abs(dim-1)%k] - cur_parent->Xs[abs(dim-1)%k]) < cur_min_dis ) ) {
             if(!cur_parent->right->isVisited){
                 *cur_node = cur_parent->right;
-                return nn_query_down(X, cur_parent->right, height-1, cur_min_dis, cur_node,original_node);
+                return nn_query_down(X, cur_parent->right, height-1, cur_min_dis, cur_node,original_node,best_index);
             }else if(!cur_parent->left->isVisited) {
                 *cur_node = cur_parent->left;
-                return nn_query_down(X, cur_parent->left, height-1, cur_min_dis, cur_node,original_node);
+                return nn_query_down(X, cur_parent->left, height-1, cur_min_dis, cur_node,original_node,best_index);
             }else{
                 cur_parent->right->isVisited= true; cur_parent->left->isVisited= true;
                 cur_node = &((*cur_node)->parent_ptr);
@@ -147,17 +145,24 @@ void nn_query_down(float* X, kd_node* root, int height, float cur_min_dis, kd_no
 
 }
 
-
+float bruteforce_nn(float* X, kd_node* kds){
+    float res = 99999;
+    for(int i = 0; i<N;i++){
+        res = min(res, euclid_dis(X,kds[i].Xs));
+    }
+    return res;
+}
 
 
 float* nn_query(float* X, kd_node* root ){
     kd_node* cur_node = nullptr;
     int height = 0; float cur_min_dis = 999999;
-    nn_query_down(X,root,height,cur_min_dis,&cur_node,root);
+    float* result = new float [k];
+    nn_query_down(X,root,height,cur_min_dis,&cur_node,root,&result);
     // root->parent_ptr && ( abs(X[abs(dim-1)%k] - root->parent_ptr->Xs[abs(dim-1)%k]) < *cur_min_dis )
     /*如果超球面穿过平面，则平面的另一侧可能有更近的点，因此算法必须从当前节点向下移动树的另一个分支以寻找更近的点，遵循与整个搜索相同的递归过程.
       如果超球面不与分裂平面相交，则算法继续沿树向上走，并消除该节点另一侧的整个分支。*/
-    return cur_node->Xs;
+    return result;
 }
 
 
@@ -212,11 +217,10 @@ int main(){
 
     //1-NN on  k-d tree
     cout<<endl<<"NN query"<<endl;
-    auto * X = new float [k]; X[0] = 166; X[1] = 200; X[2]=-300;
+    auto * X = new float [k]; X[0] = 166; X[1] = 200; X[2]=300; X[3] = 400;
 
     float* res = nn_query(X,&kds[N/2]);
     for(int i = 0; i<k; i++){ cout<<"dim "<<i<<": "<<res[i]<<" "<<endl;}
-    cout<< "euclid dis: "<< euclid_dis(X,res)<<endl;
-
+    cout<< "euclid dis from kd-tree: "<< euclid_dis(X,res)<<endl<<"euclid dis from brute force: "<<bruteforce_nn(X,kds);
     return 0;
 }
