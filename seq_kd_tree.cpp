@@ -1,11 +1,7 @@
-/*
-todo:   1. dim on varinace?
-        2. median partition
- */
-
 #include <iostream>
 #include<algorithm>
 #include<queue>
+#include<cmath>
 using namespace std;
 
 int N=129;   // N nodes
@@ -26,6 +22,10 @@ inline int murmurhash(int u )
 
 struct kd_node{
     float Xs[k];
+
+    bool isVisited = false;
+    kd_node* parent_ptr = nullptr;
+
     kd_node* left = nullptr;
     kd_node* right = nullptr;
 };
@@ -39,7 +39,7 @@ void creat_kds(kd_node* kd_node_list){
     }
 }
 
-//todo:
+//todo: appro median causes imbalance?
 float select_pivot(kd_node* kds, int n, int dim, int sample_size = 5){
     if(n<sample_size){
         return kds[0].Xs[dim]/2.0 + kds[1].Xs[dim]/2.0;
@@ -59,15 +59,18 @@ void build_kd_tree(kd_node* left_kds, int left_n, kd_node* right_kds, int right_
 
     if (left_n==1){
         parent->left=&left_kds[0];
+        left_kds[0].parent_ptr=parent;
         left_n=0;
     }else if(left_n>=2){
         std::sort(left_kds,left_kds+left_n, [&dim](kd_node x, kd_node y){return x.Xs[dim] < y.Xs[dim];});
         parent->left=&left_kds[left_n/2];
+        left_kds[left_n/2].parent_ptr=parent;
         build_kd_tree(left_kds,left_n/2,left_kds+left_n/2+1,left_n-left_n/2-1,height+1,parent->left);
     }
 
     if (right_n==1){
         parent->right=&right_kds[0];
+        right_kds[0].parent_ptr=parent;
         right_n=0;
     }else if(false){
         float avg = select_pivot(right_kds,right_n,dim);
@@ -78,6 +81,7 @@ void build_kd_tree(kd_node* left_kds, int left_n, kd_node* right_kds, int right_
     }else if(right_n>=2){
         std::sort(right_kds,right_kds+right_n, [&dim](kd_node x, kd_node y){return x.Xs[dim] < y.Xs[dim];});
         parent->right=&right_kds[right_n/2];
+        right_kds[right_n/2].parent_ptr=parent;
         build_kd_tree(right_kds,right_n/2,right_kds+right_n/2+1,right_n-right_n/2-1,height+1,parent->right);
     }
 
@@ -85,6 +89,52 @@ void build_kd_tree(kd_node* left_kds, int left_n, kd_node* right_kds, int right_
         return;
     }
 }
+
+float euclid_dis(float* X, float* Y){
+    float res = 0;
+    for(int i = 0; i<k; i++){
+        res+=(X[i]-Y[i])*(X[i]-Y[i]);
+    }
+    return sqrt(res);
+}
+
+//todo: after reaching a leaf node, we may need to trace back if
+const bool NeedTrackBack = true;
+bool nn_query_down(float* X, kd_node* root, int* height, float* cur_min_dis, kd_node** cur_node){
+    int dim = *height % k;
+    if(*cur_min_dis>= euclid_dis(X,root->Xs)){
+        *cur_min_dis= euclid_dis(X,root->Xs);
+    }
+    *cur_node = root;
+
+    if(X[dim]>root->Xs[dim]){
+        if(root->right){
+            *height+=1;
+            return nn_query_down(X, root->right,height, cur_min_dis, cur_node);
+        }
+    }else{
+        if(root->left){
+            *height+=1;
+            return nn_query_down(X, root->left,height, cur_min_dis, cur_node);
+        }
+    }
+
+    // if the hyper plant "intersection"s the hyper ball :
+    if (root->parent_ptr && ( abs(X[abs(dim-1)%k] - root->parent_ptr->Xs[abs(dim-1)%k]) > *cur_min_dis ) ) {
+        cout<<"Need Trace Back!"<<abs( X[abs(dim-1)%k] - root->parent_ptr->Xs[abs(dim-1)%k] )<< endl;
+        return NeedTrackBack;
+    } else {
+        return false;
+    }
+}
+
+float* nn_query(float* X, kd_node* root ){
+    kd_node* cur_node = nullptr;
+    int height = 0; float cur_min_dis = 999999;
+    nn_query_down(X,root,&height,&cur_min_dis,&cur_node);
+    return cur_node->Xs;
+}
+
 
 //copied from lc
 void levelOrder(kd_node* root) {
@@ -130,9 +180,18 @@ int main(){
     //build
     std::sort(kds,kds+N, [](kd_node x, kd_node y){return x.Xs[0] < y.Xs[0];});
     build_kd_tree(kds,N/2,kds+N/2+1,N-N/2-1,1,&kds[N/2]);
-    cout<<"built, nice"<<endl;
+    cout<<"built, nice"<<endl<<"Level Traverse:";
 
     //level order
     levelOrder(&kds[N/2]);
+
+    //1-NN on  k-d tree
+    cout<<endl<<"NN query"<<endl;
+    auto * X = new float [k]; for(int i = 0; i<k; i++){ X[i] = murmurhash(i)%666;}
+
+    float* res = nn_query(X,&kds[N/2]);
+    for(int i = 0; i<k; i++){ cout<<"dim "<<i<<": "<<res[i]<<" "<<endl;}
+    cout<< "euclid dis: "<< euclid_dis(X,res)<<endl;
+
     return 0;
 }
