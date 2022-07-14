@@ -3,11 +3,12 @@
 #include<queue>
 #include<cmath>
 #include <thread>         // std::this_thread::sleep_for
-#include <chrono>         // std::chrono::seconds
+#include <queue>          // std::priority_queue
+
 
 using namespace std;
 
-int N = 1234;   // N nodes
+int N = 124;   // N nodes
 const int k = 4; // k-d
 
 inline int murmurhash(int u) {
@@ -24,12 +25,19 @@ inline int murmurhash(int u) {
 
 struct kd_node {
     float Xs[k];
-
+    string info;
     bool isVisited = false;
-    kd_node *parent_ptr = nullptr;
 
+    kd_node *parent_ptr = nullptr;
     kd_node *left = nullptr;
     kd_node *right = nullptr;
+};
+
+struct dis_info_pair{
+    float distance;
+    string info;
+    bool operator <(dis_info_pair a) const  {  return distance < a.distance; }
+    bool operator >(dis_info_pair a) const  {  return distance > a.distance; }
 };
 
 void creat_kds(kd_node *kd_node_list) {
@@ -93,81 +101,34 @@ float euclid_dis(float *X, float *Y) {
     }
     return sqrt(res);
 }
-void nn_query_up(float *X, kd_node *root, int height, float *cur_min_dis,
-                 float **best_index);
 
-void nn_query_down(float *X, kd_node *root, int height, float *cur_min_dis,
-                   float *best_index) {
-    int dim = height % k;
+
+void nn_query_down(float *X, kd_node *root, int height, float *cur_min_dis) {
     if (!root){
         return;
     }
-    std::this_thread::sleep_for (std::chrono::microseconds (3000));
+    int dim = height % k;
     if (*cur_min_dis > euclid_dis(X, root->Xs)) {
         *cur_min_dis = euclid_dis(X, root->Xs);
     }
     //root->isVisited = true;
-    bool isLeft;
-    std::this_thread::sleep_for (std::chrono::microseconds (3000));
+    bool goLeft = false;
 
     if (X[dim] > root->Xs[dim]) {
-        nn_query_down(X, root->right, height + 1, cur_min_dis, best_index);
+        nn_query_down(X, root->right, height + 1, cur_min_dis);
     } else {
-        isLeft = true;
-        nn_query_down(X, root->left, height + 1, cur_min_dis, best_index);
+        goLeft = true;
+        nn_query_down(X, root->left, height + 1, cur_min_dis);
     }
-    std::this_thread::sleep_for (std::chrono::microseconds (3000));
 
     if( abs(X[dim] - root->Xs[dim]) < *cur_min_dis ){
-        if (isLeft){
-            nn_query_down(X, root->right, height + 1, cur_min_dis, best_index);
+        if (goLeft){
+            nn_query_down(X, root->right, height + 1, cur_min_dis);
         }else{
-            nn_query_down(X, root->left, height + 1, cur_min_dis, best_index);
+            nn_query_down(X, root->left, height + 1, cur_min_dis);
         }
     }
 }
-
-
-
-/*
-void nn_query_up(float *X, kd_node *root, int height, float cur_min_dis, kd_node *original_node,
-                 float **best_index) {
-    //printIndex(root);
-    if (root->parent_ptr) {
-        root = root->parent_ptr;
-        height --;
-        int dim = height % k;
-        //cout << "height " << height << "  dim "<<dim<<endl;
-        // abs X[dim] - Parent[dim] <= cur_min
-
-
-        if ( root->left->isVisited && root->right->isVisited) {
-            //cout<<"Go Up"<<endl;
-            //root = root->parent_ptr;
-            nn_query_up(X, root, height, cur_min_dis, original_node, best_index);
-        }else if (root->left->isVisited && root->right) {
-            //cout<<"right diff "<<abs(root->Xs[dim] - X[dim])<<endl;
-            if (abs(root->Xs[dim] - X[dim]) < cur_min_dis) {
-                nn_query_down(X, root->right, ++height , cur_min_dis, original_node, best_index);
-            }else{
-                //cout<<"right X up"<<endl;
-                nn_query_up(X, root, height, cur_min_dis, original_node, best_index);
-            }
-        } else if(root->right->isVisited && root->left){
-            //cout<<"left diff "<<abs(root->Xs[dim] - X[dim])<<endl;
-            if (abs(root->Xs[dim] - X[dim]) < cur_min_dis) {
-                //cout<<"Go Left"<<endl;
-                nn_query_down(X, root->left, ++height , cur_min_dis, original_node, best_index);
-            }else{
-                //cout<<"left X up"<<endl;
-                nn_query_up(X, root, height, cur_min_dis, original_node, best_index);
-            }
-        } else{
-            cout<<"Error, Don't know l&r";
-        }
-    }
-}
- */
 
 float bruteforce_nn(float *X, kd_node *kds) {
     float *resX = new float[k];
@@ -181,13 +142,68 @@ float bruteforce_nn(float *X, kd_node *kds) {
     return res;
 }
 
+float* bruteforce_nn(float *X, kd_node *kds, int fixedSize) {
+    float *resX = new float[fixedSize+1];
+    for(int i = 0; i<fixedSize+1; i++){
+        resX[i] = 9999999;
+    }
+    for (int i = 0; i < N; i++) {
+        resX[fixedSize] = euclid_dis(X, kds[i].Xs);
+        sort(resX,resX+fixedSize+1);
+    }
+    return resX;
+}
+
 
 float nn_query(float *X, kd_node *root) {
     int height = 0;
-    float cur_min_dis = float(999999);
-    float *result = new float[k];
-    nn_query_down(X, root, height, &cur_min_dis, result);
+    float cur_min_dis = 999999; //todo: C++ type.inf?
+    nn_query_down(X, root, height, &cur_min_dis);
     return cur_min_dis;
+}
+
+void nn_query_down(float *X, kd_node *root, int height, float *cur_min_dis, int fixedSize, std::priority_queue<dis_info_pair>* node_pairs);
+
+std::priority_queue<dis_info_pair> nn_query(float *X, kd_node *root, int fixedSize) {
+    int height = 0;
+    float cur_min_dis = 999999; //todo: C++ inf?
+    std::priority_queue<dis_info_pair> heap;
+    nn_query_down(X, root, height, &cur_min_dis, fixedSize, &heap);
+    return heap;
+}
+void nn_query_down(float *X, kd_node *root, int height, float *cur_min_dis, int fixedSize, std::priority_queue<dis_info_pair> *node_heap) {
+    if (!root){
+        return;
+    }
+    int dim = height % k;
+    if (*cur_min_dis > euclid_dis(X, root->Xs)) {
+        *cur_min_dis = euclid_dis(X, root->Xs);
+    }
+    //root->isVisited = true;
+    bool goLeft = false;
+    int cur_heap_size = node_heap->size();
+    dis_info_pair temp{euclid_dis(X, root->Xs), root->info};
+    if(cur_heap_size < fixedSize){
+        node_heap->push(temp);
+    }else if(temp < node_heap->top()){
+        node_heap->pop();
+        node_heap->push(temp);
+    }
+
+    if (X[dim] > root->Xs[dim]) {
+        nn_query_down(X, root->right, height + 1, cur_min_dis,fixedSize,node_heap);
+    } else {
+        goLeft = true;
+        nn_query_down(X, root->left, height + 1, cur_min_dis,fixedSize,node_heap);
+    }
+
+    if( abs(X[dim] - root->Xs[dim]) < *cur_min_dis ){
+        if (goLeft){
+            nn_query_down(X, root->right, height + 1, cur_min_dis,fixedSize,node_heap);
+        }else{
+            nn_query_down(X, root->left, height + 1, cur_min_dis,fixedSize,node_heap);
+        }
+    }
 }
 
 
@@ -246,20 +262,25 @@ int main() {
     X[1] = 779;
     X[2] = 100;
     X[3] = 330;
-    cout<<"bf "<<bruteforce_nn(X, kds)<<endl <<nn_query(X,&kds[N/2])<< endl;
 
-
-    for(int i = 0; i<3300; i++){
+    for(int i = 0; i<123300; i++){
         X[0] = (murmurhash(i)* murmurhash(i)/213)%997;
         X[1] = (murmurhash(i)* murmurhash(i)/333)%997;
-
+        X[2] = (murmurhash(i)* murmurhash(i)/444)%997;
+        X[3] = (murmurhash(i)* murmurhash(i)/555)%997;
         if(nn_query(X,&kds[N/2]) != bruteforce_nn(X, kds)){
             cout<<"Wrong Answer!"<<bruteforce_nn(X, kds)<<"  "  <<nn_query(X,&kds[N/2])<< endl  << X[0]<<" "<<X[1]<<" "<<X[2]<<" "<<X[3];
-        }else{
-            cout<<"OK";
         }
     }
+    cout<<"passed NN test"<<endl;
 
-
+    std::priority_queue<dis_info_pair> A = nn_query(X,&kds[N/2],5);
+    float* B = bruteforce_nn(X,kds,5);
+    for(int i = 0; i<5; i++){
+        float a = A.top().distance;
+        A.pop();
+        float b = B[i];
+        cout<<a<<"   "<<b<<endl;
+    }
     return 0;
 }
