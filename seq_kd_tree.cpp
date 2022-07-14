@@ -8,8 +8,8 @@
 
 using namespace std;
 
-int N = 124;   // N nodes
-const int k = 4; // k-d
+int N = 12345;   // N nodes
+const int k = 5; // k-d
 
 inline int murmurhash(int u) {
     size_t v = u * 3935559000370003845ul + 2691343689449507681ul;
@@ -162,46 +162,43 @@ float nn_query(float *X, kd_node *root) {
     return cur_min_dis;
 }
 
-void nn_query_down(float *X, kd_node *root, int height, float *cur_min_dis, int fixedSize, std::priority_queue<dis_info_pair>* node_pairs);
+void nn_query_down(float *X, kd_node *root, int height, int fixedSize, std::priority_queue<dis_info_pair>* node_pairs);
 
 std::priority_queue<dis_info_pair> nn_query(float *X, kd_node *root, int fixedSize) {
     int height = 0;
     float cur_min_dis = 999999; //todo: C++ inf?
     std::priority_queue<dis_info_pair> heap;
-    nn_query_down(X, root, height, &cur_min_dis, fixedSize, &heap);
+    nn_query_down(X, root, height, fixedSize, &heap);
     return heap;
 }
-void nn_query_down(float *X, kd_node *root, int height, float *cur_min_dis, int fixedSize, std::priority_queue<dis_info_pair> *node_heap) {
+void nn_query_down(float *X, kd_node *root, int height, int fixedSize, std::priority_queue<dis_info_pair> *node_heap) {
     if (!root){
         return;
     }
     int dim = height % k;
-    if (*cur_min_dis > euclid_dis(X, root->Xs)) {
-        *cur_min_dis = euclid_dis(X, root->Xs);
-    }
-    //root->isVisited = true;
-    bool goLeft = false;
-    int cur_heap_size = node_heap->size();
     dis_info_pair temp{euclid_dis(X, root->Xs), root->info};
-    if(cur_heap_size < fixedSize){
+    bool goLeft = false;
+
+    if(node_heap->size()<fixedSize){
         node_heap->push(temp);
-    }else if(temp < node_heap->top()){
+    }  else if(temp < node_heap->top()){
         node_heap->pop();
         node_heap->push(temp);
     }
 
+
     if (X[dim] > root->Xs[dim]) {
-        nn_query_down(X, root->right, height + 1, cur_min_dis,fixedSize,node_heap);
+        nn_query_down(X, root->right, height + 1,fixedSize,node_heap);
     } else {
         goLeft = true;
-        nn_query_down(X, root->left, height + 1, cur_min_dis,fixedSize,node_heap);
+        nn_query_down(X, root->left, height + 1,fixedSize,node_heap);
     }
 
-    if( abs(X[dim] - root->Xs[dim]) < *cur_min_dis ){
+    if( abs(X[dim] - root->Xs[dim]) < node_heap->top().distance ){
         if (goLeft){
-            nn_query_down(X, root->right, height + 1, cur_min_dis,fixedSize,node_heap);
+            nn_query_down(X, root->right, height + 1,fixedSize,node_heap);
         }else{
-            nn_query_down(X, root->left, height + 1, cur_min_dis,fixedSize,node_heap);
+            nn_query_down(X, root->left, height + 1,fixedSize,node_heap);
         }
     }
 }
@@ -256,14 +253,13 @@ int main() {
     //levelOrder(&kds[N/2]);
 
     //1-NN on  k-d tree
-    cout << endl << "NN query" << endl;
     auto *X = new float[k];
     X[0] = 152;
     X[1] = 779;
     X[2] = 100;
     X[3] = 330;
 
-    for(int i = 0; i<123300; i++){
+    for(int i = 0; i<1234; i++){
         X[0] = (murmurhash(i)* murmurhash(i)/213)%997;
         X[1] = (murmurhash(i)* murmurhash(i)/333)%997;
         X[2] = (murmurhash(i)* murmurhash(i)/444)%997;
@@ -274,13 +270,29 @@ int main() {
     }
     cout<<"passed NN test"<<endl;
 
-    std::priority_queue<dis_info_pair> A = nn_query(X,&kds[N/2],5);
-    float* B = bruteforce_nn(X,kds,5);
-    for(int i = 0; i<5; i++){
-        float a = A.top().distance;
-        A.pop();
-        float b = B[i];
-        cout<<a<<"   "<<b<<endl;
+    for(int i = 0; i<5678; i++){
+        X[0] = (murmurhash(i)* murmurhash(i)/213)%997;
+        X[1] = (murmurhash(i)* murmurhash(i)/333)%997;
+        X[2] = (murmurhash(i)* murmurhash(i)/444)%997;
+        X[3] = (murmurhash(i)* murmurhash(i)/555)%997;
+
+        std::priority_queue<dis_info_pair> A = nn_query(X,&kds[N/2],5);
+        float* B = bruteforce_nn(X,kds,5);
+        float* AA = new float[5];
+        for(int i = 4; i>=0; i--){
+            float a = A.top().distance;
+            A.pop();
+            AA[i] = a;
+            if (AA[i]!=B[i]){
+                cout<<"failed knn"<<endl;
+                for(int j = 0; j<5; j++){
+                    cout<<AA[j]<<" "<<B[j]<<endl;
+                }
+            }
+        }
+
     }
+
+    cout<<"passed kNN test"<<endl;
     return 0;
 }
