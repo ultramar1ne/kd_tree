@@ -24,36 +24,40 @@ typedef K_neighbor_search::Distance                         Distance;
 #include <fstream>
 #include <string>
 #include <sstream>
+#include "myknn.h"
+#include <chrono>   
 
 using namespace std;
 using namespace boost;
-
+using namespace chrono;
 
 int main()
 {
-  const unsigned int K = 5;
+  const unsigned int K = 7;
   std::vector<Point_3> points;
   std::vector<int>     indices;
-
-    std::ifstream myFile("./survival.data");
+  kd_node* kds = new kd_node[N];
+  
+    std::ifstream myFile("./survival_enlarge.data");
     if (myFile) {  
       std::string buf;
       char_separator<char> sep(",");
+      int kd_i = 0;
       while (getline(myFile, buf)){
         tokenizer<char_separator<char>> tokens(buf, sep);
         int i = 0;
         std::vector<double> tmp(3);
         for (const auto& t : tokens) {
           if(i<3){
-            if(i==2){
-              tmp[i++] = 5*stod(t); //normarlize
-            }else{
-              tmp[i++] = stod(t);
-            }
+              kds[kd_i].Xs[i] = stof(t);
+              tmp[i] = stod(t); 
+              i++;
           }else{
+            kds[kd_i].info = t;
             indices.push_back(stod(t));
-          }  
+          }
         }
+        kd_i++;
         points.push_back( Point_3(tmp[0],tmp[1],tmp[2]) );
       }
     }
@@ -61,10 +65,38 @@ int main()
   // Insert number_of_data_points in the tree
   Tree tree(boost::make_zip_iterator(boost::make_tuple( points.begin(),indices.begin())),
             boost::make_zip_iterator(boost::make_tuple( points.end(),indices.end())));
+
+    build_kd_tree(kds, N / 2, kds + N / 2 + 1, N - N / 2 - 1, 1, &kds[N / 2]);
+  cout<<"tree built"<<endl;
+
   // search K nearest neighbours
   Point_3 query(62, 59, 13);
+  float X[3] = {62,59,13};
   Distance tr_dist;
+  auto start = system_clock::now();
   K_neighbor_search search(tree, query, K);
+  auto end   = system_clock::now();
+  auto duration = duration_cast<microseconds>(end - start);
+  cout <<  "cgal time"<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl;
+
+  
+  start = system_clock::now();
+  auto A = nn_query(X,&kds[N/2],knn_kSize);
+  end   = system_clock::now();
+  duration = duration_cast<microseconds>(end - start);
+  cout <<  "my_knn time"<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl;
+
+  
+  
+  //print
+  auto B = bruteforce_nn(X,kds,knn_kSize);
+  for(int i = 0; i<knn_kSize; i++){
+    auto a = A.top();
+    cout<< a.distance <<" "<< a.info<< "    bruteforce:" << B[i]<<endl;
+    A.pop();
+  }
+  cout<<nn_query(X,&kds[N/2])<<"nn"<<endl;
+
   for(K_neighbor_search::iterator it = search.begin(); it != search.end(); it++){
     std::cout << "distance: "
               << tr_dist.inverse_of_transformed_distance(it->second) << " posistion: "
