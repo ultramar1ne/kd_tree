@@ -36,48 +36,42 @@ int main()
   const unsigned int K = 7;
   std::vector<Point_3> points;
   std::vector<int>     indices;
+  cout<<"enter a number N"<<endl;
+  cin>>N;
   kdn_vec kds(N);
-  
-    std::ifstream myFile("./test.data");
-    if (myFile) {  
-      std::string buf;
-      char_separator<char> sep(",");
-      int kd_i = 0;
-      while (getline(myFile, buf)){
-        tokenizer<char_separator<char>> tokens(buf, sep);
-        int i = 0;
-        std::vector<double> tmp(3);
-        for (const auto& t : tokens) {
-          if(i<3){
-              kds[kd_i].Xs[i] = stof(t);
-              tmp[i] = stod(t); 
-              i++;
-          }else{
-            kds[kd_i].info = t;
-            indices.push_back(stod(t));
-          }
-        }
-        kd_i++;
-        points.push_back( Point_3(tmp[0],tmp[1],tmp[2]) );
-      }
+
+  for(int i = 0; i<N; i++){
+    points.push_back( Point_3(murmurhash(i),murmurhash(2*i),murmurhash(3*i)) );
+    for(int j = 0; j<3; j++){
+      kds[i].Xs[j] = murmurhash(i*(j+1));
     }
+    indices.push_back(int(i));
+  }
+  cout<<"dataset generated"<<endl;
 
   // Insert number_of_data_points in the tree
+  auto start = system_clock::now();
   Tree tree(boost::make_zip_iterator(boost::make_tuple( points.begin(),indices.begin())),
             boost::make_zip_iterator(boost::make_tuple( points.end(),indices.end())));
+  auto end   = system_clock::now();
+  auto duration = duration_cast<microseconds>(end - start);
+  cout <<  "cgal tree building "<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl;
 
+  start = system_clock::now();
   auto root = build_kd_tree(kds.begin(),kds.end(),0);
-  cout<<"tree built"<<endl;
-
+  end   = system_clock::now();
+  duration = duration_cast<microseconds>(end - start);
+  cout <<  "myknn tree building "<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl << endl;
+  
   // search K nearest neighbours
   Point_3 query(62, 59, 13);
   float X[3] = {62,59,13};
   Distance tr_dist;
-  auto start = system_clock::now();
+  start = system_clock::now();
   K_neighbor_search search(tree, query, K);
-  auto end   = system_clock::now();
-  auto duration = duration_cast<microseconds>(end - start);
-  cout <<  "cgal time"<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl;
+  end   = system_clock::now();
+  duration = duration_cast<microseconds>(end - start);
+  cout <<  "cgal time "<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl;
 
   
   start = system_clock::now();
@@ -90,13 +84,13 @@ int main()
   auto B = bruteforce_nn(X,kds,knn_kSize);
   end   = system_clock::now();
   duration = duration_cast<microseconds>(end - start);
-  cout <<  "brute force time"<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl;
+  cout <<  "brute force time"<< double(duration.count()) * microseconds::period::num / microseconds::period::den << endl << endl;
 
   
   //print
   for(int i = 0; i<knn_kSize; i++){
     auto a = A.top();
-    cout<< "index: "<< a.distance <<" tag:"<< a.info<< "    bruteforce:" << B[i]<<endl;
+    cout<< "dis: "<< a.distance <<" tag:"<< a.info<< "    bruteforce:" << B[i]<<endl;
     A.pop();
   }
   cout<<nn_query(X,root)<<" nn"<<endl;
